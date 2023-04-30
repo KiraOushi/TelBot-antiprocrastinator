@@ -1,0 +1,266 @@
+
+import asyncio
+import logging
+import random
+from datetime import datetime
+from aiogram import Bot, Dispatcher, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Text
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types.message import Message
+from aiogram.utils import executor
+
+# Инициализация бота и диспетчера
+
+
+bot = Bot(token='6110695381:AAGALUqrC-oO5iNXGxNPCT1AAMfSO4unQAI')
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+# Включение логирования
+logging.basicConfig(level=logging.INFO)
+
+
+# Стейты для FSM (finite state machine)
+class AntiProcrastination(FSMContext):
+    waiting_for_confirmation = "waiting_for_confirmation"
+
+
+# Список креативных сообщений
+greetings = [
+    "Приветствую, пользователь! Работа никогда не была такой увлекательной, начнем?",
+    "Привет! Ну что, готовы быть настоящим профессионалом и заниматься делами?",
+    "Доброго времени суток! Вы готовы покорить мир своими достижениями?",
+]
+questions = [
+    "Итак, поехали! Прокрастинируете ли вы сейчас? (Да/Нет)",
+    "Продолжаем работать? Вы готовы начать следующий цикл 25/5?",
+    "Снова прокрастинируете? (Да/Нет)",
+    "Вы заслужили небольшой перерыв. А сейчас? (Готовы продолжить работу?/Да, я готов!)",
+]
+working_quotes = [
+    "Работать – значит, жить полной мерой.",
+    "Работа – это наслаждение жизнью.",
+    "Работа счастливого человека есть его игра.",
+    "Каждый успех, каждое достижение, каждый шаг к цели – результат усилий.",
+    "Работайте, и будьте как камень, который благодаря своей твердости становится жемчужиной.",
+]
+procrastination_quotes = [
+    "Прокрастинация – это убийца производительности.",
+    "Никогда не откладывайте на завтра то, что можно сделать сегодня.",
+    "Прокрастинация – это мошенничество, которое вы играете с самим собой.",
+    "Отложить дело – это как разложить свою жизнь на части и выбросить куски.",
+    "Отложенные дела не обязательно вернутся, но обязательно вернут усталость.",
+]
+working_messages = [
+    "Давайте работать, сколько успеем!",
+    "Устали? Давайте сделаем перерыв и продолжим работу.",
+    "Погнали работать и достигать больших высот!",
+    "Сегодняшний день – это ваш шанс быть лучшим в этом мире.",
+    "Начнем работать и побеждать прокрастинацию!",
+]
+procrastination_messages = [
+    "Не уходите с работы! Прокрастинация убьет вашу производительность.",
+    "Нет времени прокрастинировать! Давайте вернемся к работе.",
+    "Прокрастинация – это ужасная привычка. Давайте ее преодолеем вместе!",
+    "Не позволяйте прокрастинации взять верх. Вернитесь к работе!",
+    "Сосредоточьтесь на работе и достигайте успеха, а не прокрастинации.",
+]
+rest_quotes = [
+    "Время отдохнуть. Дышите глубоко и расслабьтесь.",
+    "Вам нужно сделать перерыв, чтобы снова зарядиться энергией.",
+    "Перерывы – это важная часть продуктивности. Отдохните и вернитесь к работе!",
+    "Вы заслужили перерыв. Наслаждайтесь им!",
+    "Отдыхайте, расслабьтесь и зарядитесь энергией для следующей рабочей сессии.",
+]
+procrastination_times = {}
+confirmation_keyboard = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Да", callback_data="yes"),
+            InlineKeyboardButton(text="Нет", callback_data="no"),
+        ]
+    ]
+)
+
+
+@dp.message_handler(commands=["start"])
+async def send_start_message(message: types.Message, state: FSMContext):
+    await message.reply("Привет пользователь! Давайте начнем работу?", reply_markup=confirmation_keyboard)
+    user_id = message.from_user.id
+    await state.update_data(waiting_for_confirmation=True)
+    asyncio.create_task(send_working_message(user_id))
+
+
+# Block 2
+async def send_procrastination_message(user_id: int):
+    await asyncio.sleep(5 * 60)  # 5 minutes rest
+    await bot.send_message(user_id, random.choice(procrastination_quotes))
+    await bot.send_message(user_id, "Прокрастинируете ли вы в данный момент?", reply_markup=confirmation_keyboard)
+    await AntiProcrastination.waiting_for_confirmation.set()
+
+
+# Обработчик нажатия кнопки "Да" на клавиатуре подтверждения
+@dp.message_handler(Text(equals="Да"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_yes(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["procrastination"].append(datetime.now())
+    await send_working_message(user_id)
+
+
+# Обработчик нажатия кнопки "Нет" на клавиатуре подтверждения
+@dp.message_handler(Text(equals="Нет"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_no(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["working"].append(datetime.now())
+    await send_procrastination_message(user_id)
+
+
+# Отправка сообщения о начале работы
+async def send_working_message(user_id: int):
+    await asyncio.sleep(25 * 60)  # 25 minutes of work
+    await bot.send_message(user_id, random.choice(working_quotes))
+    await bot.send_message(user_id, "Прокрастинируете ли вы в данный момент?", reply_markup=confirmation_keyboard)
+    await AntiProcrastination.waiting_for_confirmation.set()
+
+
+# Обработчик нажатия кнопки "Да" на клавиатуре подтверждения
+@dp.message_handler(Text(equals="Да"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_yes(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["procrastination"].append(datetime.now())
+    await send_rest_message(user_id)
+
+
+# Block 3
+# Block 3
+# Обработчик нажатия кнопки "Нет" на клавиатуре подтверждения
+@dp.message_handler(Text(equals="Нет"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_no(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["procrastination"].append(datetime.now())
+    await send_procrastination_message(user_id)
+
+
+# Отправка сообщения о начале отдыха
+async def send_rest_message(user_id: int):
+    await asyncio.sleep(5 * 60)  # 5 minutes rest
+    await bot.send_message(user_id, random.choice(rest_quotes))
+    await bot.send_message(user_id, "Продолжаем работу?", reply_markup=confirmation_keyboard)
+    await AntiProcrastination.waiting_for_confirmation.set()
+
+
+# Обработчик нажатия кнопки "Да" на клавиатуре подтверждения
+@dp.message_handler(Text(equals="Да"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_yes(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["working"].append(datetime.now())
+    await send_working_message(user_id)
+
+
+# Обработчик нажатия кнопки "Нет" на клавиатуре подтверждения
+@dp.message_handler(Text(equals="Нет"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_no(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["procrastination"].append(datetime.now())
+    await send_procrastination_message(user_id)
+
+
+# Block 4
+async def check_total_time(user_id: int):
+    if procrastination_times.get(user_id) is None:
+        procrastination_times[user_id] = {"procrastination": [], "working": []}
+    total_working_time = 0
+    for i in range(len(procrastination_times[user_id]["working"])):
+        if i + 1 < len(procrastination_times[user_id]["procrastination"]):
+            total_working_time += (procrastination_times[user_id]["procrastination"][i + 1] -
+                                   procrastination_times[user_id]["working"][i]).total_seconds() // 60
+    return total_working_time
+
+
+async def send_working_message(user_id: int):
+    quote = random.choice(procrastination_quotes)
+    await bot.send_message(chat_id=user_id,
+                           text=f"{quote}\n\nТы работал уже {await check_total_time(user_id)} минут. Продолжай в том же духе! Прокрастинация - это удел слабаков.")
+
+
+async def send_procrastination_message(user_id: int):
+    await bot.send_message(chat_id=user_id,
+                           text="Ты прокрастинировал уже 5 минут! Хватит отдыхать, пора работать! Не забывай, что непрерывная работа на протяжении 25 минут повышает эффективность твоей деятельности.")
+
+
+@dp.message_handler(Text(equals="Привет"), state=None)
+async def process_hello(message: Message):
+    user_id = message.from_user.id
+    await bot.send_message(chat_id=user_id,
+                           text="Привет пользователь! Начнем работу?\n\nВыбери один из вариантов ответа:\nДа\nНет")
+    await AntiProcrastination.waiting_for_confirmation.set()
+
+
+@dp.message_handler(Text(equals="Да"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_yes(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["working"].append(datetime.now())
+    await send_working_message(user_id)
+
+
+# Block 5
+@dp.message_handler(Text(equals="Нет"), state=AntiProcrastination.waiting_for_confirmation)
+async def process_no(message: Message):
+    user_id = message.from_user.id
+    procrastination_times[user_id]["procrastination"].append(datetime.now())
+    await send_procrastination_message(user_id)
+
+
+async def scheduler():
+    while True:
+        user_ids = list(procrastination_times.keys())
+        for user_id in user_ids:
+            if procrastination_times[user_id].get("working") is None:
+                procrastination_times[user_id]["working"] = []
+            if procrastination_times[user_id].get("procrastination") is None:
+                procrastination_times[user_id]["procrastination"] = []
+            await send_start_message(user_id)
+            await asyncio.sleep(25 * 60)  # 25 minutes of work
+            await send_rest_message(user_id)
+            await asyncio.sleep(5 * 60)  # 5 minutes rest
+            await send_start_message(user_id)
+            await asyncio.sleep(25 * 60)  # 25 minutes of work
+            await send_rest_message(user_id)
+            await asyncio.sleep(5 * 60)  # 5 minutes rest
+        await asyncio.sleep(24 * 60 * 60)  # check once a day
+
+
+async def check_total_time(user_id: int):
+    if procrastination_times.get(user_id) is None:
+        procrastination_times[user_id] = {"procrastination": [], "working": []}
+    total_working_time = 0
+    for i in range(len(procrastination_times[user_id]["working"])):
+        if i + 1 < len(procrastination_times[user_id]["procrastination"]):
+            total_working_time += (procrastination_times[user_id]["procrastination"][i + 1] -
+                                   procrastination_times[user_id]["working"][i]).total_seconds() // 60
+    total_procrastination_time = sum([(procrastination_times[user_id]["procrastination"][i + 1] -
+                                       procrastination_times[user_id]["procrastination"][i]).total_seconds() // 60 for i
+                                      in range(len(procrastination_times[user_id]["procrastination"]) - 1)])
+    return total_working_time, total_procrastination_time
+
+
+@dp.message_handler(commands=["stats"])
+async def show_stats(message: Message):
+    user_id = message.from_user.id
+    total_working_time, total_procrastination_time = check_total_time(user_id)
+    if total_working_time == 0 and total_procrastination_time == 0:
+        await message.answer("Вы еще не начали работу. Давайте начнем! Напишите /start.")
+    else:
+        if total_working_time > total_procrastination_time:
+            await message.answer(
+                f"Вы отработали {total_working_time} минут. Это отличный результат! Продолжайте в том же духе!")
+        else:
+            await message.answer(
+                f"Вы прокрастинацировали целых {total_procrastination_time} минут! Необходимо исправить ситуацию. Вперед, к новым свершениям!")
+
+
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.create_task(scheduler())
+    executor.start_polling(dp, skip_updates=True)
